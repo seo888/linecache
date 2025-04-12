@@ -22,20 +22,20 @@ impl AsyncLineCache {
     }
 
     pub async fn get_line(&self, filename: &str, lineno: usize) -> io::Result<Option<String>> {
-        println!("正在从文件 {} 中获取第 {} 行...", filename, lineno);
+        // println!("正在从文件 {} 中获取第 {} 行...", filename, lineno);
         let file_metadata = fs::metadata(filename)?;
         let last_modified = file_metadata.modified()?;
         // 检查文件是否更新
         let cached_time = self.file_times.get(filename).map(|entry| *entry.value());
         if cached_time.is_none() || cached_time.unwrap() < last_modified {
-            println!("文件已更新，正在重新加载缓存...");
+            // println!("文件已更新，正在重新加载缓存...");
             self.check_cache(filename).await?;
         }
-        println!("缓存检查完成...");
+        // println!("缓存检查完成...");
         // 生成缓存键：文件名 + 行号
         let key = format!("{}:{}", filename, lineno);
         if let Some(line) = self.cache.get(&key) {
-            println!("从缓存中找到行内容: {:?}", line);
+            // println!("从缓存中找到行内容: {:?}", line);
             return Ok(Some(line.value().clone()));
         }
         // 如果缓存中没有，从文件中读取
@@ -43,31 +43,31 @@ impl AsyncLineCache {
             if lineno <= lines.len() {
                 let line = lines[lineno - 1].clone();
                 self.cache.insert(key, line.clone());
-                println!("从文件中读取行内容: {}", line);
+                // println!("从文件中读取行内容: {}", line);
                 return Ok(Some(line));
             }
         }
-        println!("文件 {} 中未找到第 {} 行", filename, lineno);
+        // println!("文件 {} 中未找到第 {} 行", filename, lineno);
         Ok(None)
     }
 
     pub async fn get_lines(&self, filename: &str) -> io::Result<Option<Vec<String>>> {
-        println!("正在从文件 {} 中获取所有行...", filename);
+        // println!("正在从文件 {} 中获取所有行...", filename);
         let file_metadata = fs::metadata(filename)?;
         let last_modified = file_metadata.modified()?;
         // 检查文件是否更新
         let cached_time = self.file_times.get(filename).map(|entry| *entry.value());
         if cached_time.is_none() || cached_time.unwrap() < last_modified {
-            println!("文件已更新，正在重新加载缓存...");
+            // println!("文件已更新，正在重新加载缓存...");
             self.check_cache(filename).await?;
         }
-        println!("缓存检查完成...");
+        // println!("缓存检查完成...");
         // 从缓存中获取所有行
         if let Some(lines) = self.file_lines.get(filename) {
-            println!("成功获取文件 {} 的所有行", filename);
+            // println!("成功获取文件 {} 的所有行", filename);
             return Ok(Some(lines.value().clone()));
         }
-        println!("文件 {} 未找到或为空", filename);
+        // println!("文件 {} 未找到或为空", filename);
         Ok(None)
     }
 
@@ -103,11 +103,11 @@ impl AsyncLineCache {
         let last_modified = file_metadata.modified()?;
         if let Some(cached_time) = self.file_times.get(filename).map(|entry| *entry.value()) {
             if cached_time < last_modified {
-                println!("文件已更新，正在重新加载...");
+                // println!("文件已更新，正在重新加载...");
                 self.reload_file(filename).await?;
             }
         } else {
-            println!("文件未缓存，正在加载...");
+            // println!("文件未缓存，正在加载...");
             self.load_file(filename).await?;
         }
         Ok(())

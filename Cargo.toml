@@ -1,6 +1,6 @@
 [package]
 name = "linecache"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "高效读取文本文件，并自动缓存。Efficiently read text files and automatically cache them."
 license = "MIT"
