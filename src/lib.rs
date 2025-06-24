@@ -7,6 +7,7 @@ use tokio::io::AsyncBufReadExt;
 use rand::seq::SliceRandom; // 导入 SliceRandom trait
 use std::time::SystemTime;
 
+#[derive(Debug, Clone)]
 pub struct AsyncLineCache {
     pub cache: Arc<DashMap<String, String>>, // 缓存文件行内容
     pub file_times: Arc<DashMap<String, SystemTime>>, // 缓存文件的最后修改时间
