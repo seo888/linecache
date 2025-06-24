@@ -90,6 +90,17 @@ impl AsyncLineCache {
         Ok(None)
     }
 
+    /// 获取随机行中的随机字符
+    pub async fn random_sign(&self, filename: &str) -> io::Result<Option<String>> {
+        let line = self.random_line(filename).await?;
+        Ok(line.and_then(|l| {
+            l.chars()
+                .collect::<Vec<_>>()
+                .choose(&mut rand::thread_rng())
+                .map(|c| c.to_string())
+        }))
+    }
+
     pub async fn clear_cache(&self) {
         // 清空行内容缓存
         self.cache.clear();
