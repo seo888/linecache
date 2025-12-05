@@ -27,14 +27,14 @@ async fn test_empty_and_not_found_files() -> Result<(), Box<dyn std::error::Erro
     // 1. 文件不存在
     assert_eq!(
         cache.get_content("not-exist.txt").await?,
-        Some("".to_string())
+        None
     );
 
     // 2. 空文件
     let empty = NamedTempFile::new()?;
     let ep = empty.path().to_str().unwrap().to_string();
     std::fs::write(&ep, "")?;
-    assert_eq!(cache.get_lines(&ep).await?, vec![] as Vec<String>);
+    assert_eq!(cache.get_lines(&ep).await?, None);
     assert_eq!(cache.get_content(&ep).await?, Some("".to_string()));
 
     // 3. 只包含一个 \n 的文件 —— 真实 Python linecache 行为
@@ -48,7 +48,7 @@ async fn test_empty_and_not_found_files() -> Result<(), Box<dyn std::error::Erro
 
     assert_eq!(
         cache.get_lines(&np).await?,
-        vec!["".to_string(), "".to_string()]
+        Some(vec!["".to_string(), "".to_string()])
     );
     assert_eq!(cache.get_content(&np).await?, Some("\n".to_string()));
 
@@ -85,7 +85,7 @@ async fn test_get_lines_and_content() -> Result<(), Box<dyn std::error::Error>> 
     std::fs::write(&path, content)?;
 
     // 正确！因为文件以 \n 结尾，linecache 必须多一个空行
-    let expected_lines = vec!["Hello", "World", "Rust", ""];
+    let expected_lines = Some(vec!["Hello".to_string(), "World".to_string(), "Rust".to_string(), "".to_string()]);
     assert_eq!(cache.get_lines(&path).await?, expected_lines);
 
     // 正确！原始内容就是这样
@@ -113,7 +113,7 @@ async fn test_random_getters() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(line) = cache.random_line(&path).await? {
             seen_lines.insert(line);
         }
-        if let Some(ch) = cache.random_sign_string(&path).await? {
+        if let Some(ch) = cache.random_sign(&path).await? {
             seen_chars.insert(ch);
         }
     }

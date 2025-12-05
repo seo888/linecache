@@ -1,6 +1,6 @@
 [package]
 name = "linecache"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "工业级异步行缓存（比 Python `linecache` 快 50~200 倍） (自动内存限制版本)。High-Performance Asynchronous Line Cache Library (Auto-Memory Limit Version)"
 license = "MIT"
