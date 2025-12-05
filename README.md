@@ -27,6 +27,9 @@ async fn main() -> std::io::Result<()> {
 
     // 读取第 42 行（1-based）
     let line = cache.get_line("data.txt", 42).await?;
+    
+    // 获取所有行信息
+    let lines = cache.get_lines("data.txt").await?;
 
     // 零分配随机一行（极快！）
     if let Some(random) = cache.random_line("corpus.txt").await? {
@@ -39,4 +42,4 @@ async fn main() -> std::io::Result<()> {
     }
 
     Ok(())
-}```
+}
