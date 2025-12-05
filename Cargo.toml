@@ -1,17 +1,17 @@
 [package]
 name = "linecache"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2021"
-description = "高效读取文本文件，并自动缓存。Efficiently read text files and automatically cache them."
+description = "高性能异步行缓存库 (自动内存限制版本)。High-Performance Asynchronous Line Cache Library (Auto-Memory Limit Version)"
 license = "MIT"
 repository = "https://github.com/seo888/linecache"
 
-
-
 [dependencies]
-moka = { version = "0.12.10",features = ["future"]}
-tokio = { version = "1.43.0", features = ["full"] }
-tokio-stream = "0.1.17" 
+moka = { version = "0.12",features = ["future"]}
+tokio = { version = "1.48.0", features = ["full"] }
 rand = "0.8"
-tempfile = "3.18.0"
-dashmap = "7.0.0-rc2"
+sysinfo = "0.37"
+once_cell = "1.21"
+
+[dev-dependencies]
+tempfile = "3.23"

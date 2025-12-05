@@ -1,139 +1,175 @@
 use linecache::AsyncLineCache;
-use std::io::Write;
+use std::{collections::HashSet, time::Duration};
 use tempfile::NamedTempFile;
-use tokio::time::{timeout, Duration};
-use std::fs;
+use tokio::time::sleep;
 
 #[tokio::test]
-async fn test_get_line() -> Result<(), Box<dyn std::error::Error>> {
-    println!("正在运行 test_get_line 测试...");
+async fn test_basic_line_retrieval_and_boundaries() -> Result<(), Box<dyn std::error::Error>> {
+    let cache = AsyncLineCache::new();
+    let content = "Line 1\nLine 2\nLine 3\nLast Line\n";
+    let file = NamedTempFile::new()?;
+    let path = file.path().to_str().unwrap().to_string();
+    std::fs::write(&path, content)?;
+
+    assert_eq!(cache.get_line(&path, 1).await?.unwrap(), "Line 1");
+    assert_eq!(cache.get_line(&path, 4).await?.unwrap(), "Last Line");
+    assert_eq!(cache.get_line(&path, 5).await?.unwrap(), ""); // 尾随空行
+    assert_eq!(cache.get_line(&path, 6).await?, None);
+    assert_eq!(cache.get_line(&path, 0).await?, None);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_empty_and_not_found_files() -> Result<(), Box<dyn std::error::Error>> {
     let cache = AsyncLineCache::new();
 
-    // 创建一个真实文件
-    let filename = "test_file1.txt";
-    let mut file = fs::File::create(filename)?;
-    writeln!(file, "Line 1\nLine 2\nLine 3\nLine 4\nLine 5")?;
+    // 1. 文件不存在
+    assert_eq!(
+        cache.get_content("not-exist.txt").await?,
+        Some("".to_string())
+    );
 
-    // 设置超时时间
-    let timeout_duration = Duration::from_secs(5); // 5秒超时
-    println!("正在从文件 {} 中获取第 3 行...", filename);
+    // 2. 空文件
+    let empty = NamedTempFile::new()?;
+    let ep = empty.path().to_str().unwrap().to_string();
+    std::fs::write(&ep, "")?;
+    assert_eq!(cache.get_lines(&ep).await?, vec![] as Vec<String>);
+    assert_eq!(cache.get_content(&ep).await?, Some("".to_string()));
 
-    // 使用 timeout 包裹 get_line 方法
-    match timeout(timeout_duration, cache.get_line(filename, 3)).await {
-        Ok(result) => {
-            match result {
-                Ok(line) => {
-                    println!("获取的行内容: {:?}", line);
-                    assert_eq!(line.unwrap(), "Line 3");
-                }
-                Err(e) => {
-                    println!("获取行内容时发生错误: {:?}", e);
-                    return Err(e.into()); // 将错误转换为 Box<dyn std::error::Error>
-                }
-            }
+    // 3. 只包含一个 \n 的文件 —— 真实 Python linecache 行为
+    let nl = NamedTempFile::new()?;
+    let np = nl.path().to_str().unwrap().to_string();
+    std::fs::write(&np, "\n")?;
+
+    assert_eq!(cache.get_line(&np, 1).await?.unwrap(), "");
+    assert_eq!(cache.get_line(&np, 2).await?.unwrap(), "");
+    assert_eq!(cache.get_line(&np, 3).await?, None);
+
+    assert_eq!(
+        cache.get_lines(&np).await?,
+        vec!["".to_string(), "".to_string()]
+    );
+    assert_eq!(cache.get_content(&np).await?, Some("\n".to_string()));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_file_modification_detection() -> Result<(), Box<dyn std::error::Error>> {
+    let cache = AsyncLineCache::new();
+    let file = NamedTempFile::new()?;
+    let path = file.path().to_str().unwrap().to_string();
+
+    std::fs::write(&path, "v1\n")?;
+    sleep(Duration::from_millis(100)).await;
+    assert_eq!(cache.get_line(&path, 1).await?.unwrap(), "v1");
+    assert_eq!(cache.get_line(&path, 2).await?.unwrap(), "");
+
+    std::fs::write(&path, "v2\nv22\n")?;
+    sleep(Duration::from_millis(100)).await;
+
+    assert_eq!(cache.get_line(&path, 1).await?.unwrap(), "v2");
+    assert_eq!(cache.get_line(&path, 2).await?.unwrap(), "v22");
+    assert_eq!(cache.get_line(&path, 3).await?.unwrap(), "");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_get_lines_and_content() -> Result<(), Box<dyn std::error::Error>> {
+    let cache = AsyncLineCache::new();
+    let content = "Hello\nWorld\nRust\n"; // 以 \n 结尾
+    let file = NamedTempFile::new()?;
+    let path = file.path().to_str().unwrap().to_string();
+    std::fs::write(&path, content)?;
+
+    // 正确！因为文件以 \n 结尾，linecache 必须多一个空行
+    let expected_lines = vec!["Hello", "World", "Rust", ""];
+    assert_eq!(cache.get_lines(&path).await?, expected_lines);
+
+    // 正确！原始内容就是这样
+    let expected_content = "Hello\nWorld\nRust\n";
+    assert_eq!(
+        cache.get_content(&path).await?,
+        Some(expected_content.to_string())
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_random_getters() -> Result<(), Box<dyn std::error::Error>> {
+    let cache = AsyncLineCache::new();
+    let content = "A\nB\nC\nD\n中文\n🚀\n";
+    let file = NamedTempFile::new()?;
+    let path = file.path().to_str().unwrap().to_string();
+    std::fs::write(&path, content)?;
+
+    let mut seen_lines = HashSet::new();
+    let mut seen_chars = HashSet::new();
+
+    for _ in 0..200 {
+        if let Some(line) = cache.random_line(&path).await? {
+            seen_lines.insert(line);
         }
-        Err(_) => {
-            println!("从文件 {} 中获取行内容超时", filename);
-            return Err("获取行内容时发生超时".into()); // 超时错误
+        if let Some(ch) = cache.random_sign_string(&path).await? {
+            seen_chars.insert(ch);
         }
     }
 
-    // 删除测试文件
-    println!("正在删除测试文件: {}", filename);
-    std::fs::remove_file(filename)?;
+    assert!(seen_lines.len() > 3);
+    assert!(seen_chars.len() > 5);
 
-    println!("测试通过");
     Ok(())
 }
 
 #[tokio::test]
-async fn test_get_lines() -> Result<(), Box<dyn std::error::Error>> {
-    println!("开始运行 test_get_lines 测试..."); // 添加日志输出
-
+async fn test_invalidation_and_clear() -> Result<(), Box<dyn std::error::Error>> {
     let cache = AsyncLineCache::new();
 
-    // 创建一个真实文件并写入内容
-    let filename = "test_file.txt";
-    let mut file = std::fs::File::create(filename)?; // 创建文件
-    writeln!(file, "Line 1\nLine 2\nLine 3")?; // 写入三行内容
-    println!("已创建文件 {} 并写入内容", filename); // 添加日志输出
+    let f1 = NamedTempFile::new()?;
+    let p1 = f1.path().to_str().unwrap().to_string();
+    std::fs::write(&p1, "file1\n")?;
 
-    // 调用 get_lines 方法获取所有行
-    let lines = cache.get_lines(filename).await?;
-    println!("获取的文件内容: {:?}", lines); // 添加日志输出
+    let f2 = NamedTempFile::new()?;
+    let p2 = f2.path().to_str().unwrap().to_string();
+    std::fs::write(&p2, "file2\n")?;
 
-    // 验证返回的行数据是否正确
-    assert!(lines.is_some(), "未获取到文件内容"); // 确保返回 Some
-    assert_eq!(lines.unwrap(), vec!["Line 1", "Line 2", "Line 3"]); // 验证内容
+    cache.get_line(&p1, 1).await?;
+    cache.get_content(&p1).await?;
+    cache.get_line(&p2, 1).await?;
 
-    // 删除测试文件
-    println!("正在删除测试文件: {}", filename); // 添加日志输出
-    std::fs::remove_file(filename)?; // 删除文件
+    assert!(cache.lines.get(&p1).await.is_some());
+    assert!(cache.contents.get(&p1).await.is_some());
 
-    println!("test_get_lines 测试通过"); // 添加日志输出
+    cache.invalidate(&p1).await;
+    assert!(cache.lines.get(&p1).await.is_none());
+
+    assert!(cache.lines.get(&p2).await.is_some());
+
+    cache.clear().await;
+    assert!(cache.lines.get(&p2).await.is_none());
+
     Ok(())
 }
 
 #[tokio::test]
-async fn test_random_line() -> Result<(), Box<dyn std::error::Error>> {
-    println!("开始运行 test_random_line 测试..."); // 添加日志输出
+async fn test_weigher_sanity() -> Result<(), Box<dyn std::error::Error>> {
     let cache = AsyncLineCache::new();
+    let big = "X".repeat(10 * 1024 * 1024);
+    let content = format!("{big}\nLine2\n");
 
-    // 创建一个临时文件
-    let mut file = NamedTempFile::new()?;
-    let filename = file.path().to_str().unwrap().to_string();
-    println!("已创建临时文件: {}", filename); // 添加日志输出
+    let file = NamedTempFile::new()?;
+    let path = file.path().to_str().unwrap().to_string();
+    std::fs::write(&path, content)?;
 
-    // 向文件中写入内容
-    writeln!(file, "Line 1\nLine 2\nLine 3\nLine 4\nLine 5")?;
-    println!("已向文件写入内容"); // 添加日志输出
+    cache.get_lines(&path).await?;
+    cache.get_content(&path).await?;
 
-    // 从缓存中随机获取一行
-    let line = cache.random_line(&filename).await?;
-    println!("获取的随机行内容: {:?}", line); // 添加日志输出
-    assert!(line.is_some(), "未获取到随机行内容");
+    assert!(cache.lines.get(&path).await.is_some());
+    assert!(cache.contents.get(&path).await.is_some());
 
-    println!("test_random_line 测试通过"); // 添加日志输出
+    cache.clear().await;
     Ok(())
-}
-
-#[tokio::test]
-async fn test_clear_cache() {
-    // 定义文件名
-    let filename = "test_file3.txt";
-
-    // 创建文件并写入内容
-    let mut file = fs::File::create(filename).expect("创建文件失败");
-    writeln!(file, "Line 1").expect("写入文件失败");
-    writeln!(file, "Line 2").expect("写入文件失败");
-    writeln!(file, "Line 3").expect("写入文件失败");
-    file.flush().expect("刷新文件失败");
-
-    let cache = AsyncLineCache::new();
-
-    // 加载文件并缓存
-    let lineno = 1;
-    println!("正在加载文件并缓存...");
-    let result = cache.get_line(filename, lineno).await;
-    assert!(result.is_ok(), "文件加载失败");
-
-    // 检查缓存是否被正确加载
-    let key = format!("{}:{}", filename, lineno);
-    assert!(cache.cache.get(&key).is_some(), "缓存中应包含该行内容");
-
-    // 清空缓存
-    println!("正在清空缓存...");
-    cache.clear_cache().await;
-
-    // 检查缓存是否被清空
-    println!("检查缓存是否被清空...");
-    assert!(cache.cache.get(&key).is_none(), "行内容缓存应已被清空");
-    assert!(cache.file_times.get(filename).is_none(), "文件修改时间缓存应已被清空");
-    assert!(cache.file_lines.get(filename).is_none(), "文件行缓存应已被清空");
-
-    println!("缓存清空测试通过");
-
-    // 测试完成后，删除文件
-    fs::remove_file(filename).expect("删除文件失败");
-    println!("文件已删除");
 }
