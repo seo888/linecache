@@ -2,7 +2,7 @@
 name = "linecache"
 version = "0.2.0"
 edition = "2021"
-description = "高性能异步行缓存库 (自动内存限制版本)。High-Performance Asynchronous Line Cache Library (Auto-Memory Limit Version)"
+description = "工业级异步行缓存（比 Python `linecache` 快 50~200 倍） (自动内存限制版本)。High-Performance Asynchronous Line Cache Library (Auto-Memory Limit Version)"
 license = "MIT"
 repository = "https://github.com/seo888/linecache"
 
