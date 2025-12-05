@@ -25,20 +25,24 @@ use linecache::AsyncLineCache;
 async fn main() -> std::io::Result<()> {
     let cache = AsyncLineCache::new();
 
-    // 读取第 42 行（1-based）
-    let line = cache.get_line("data.txt", 42).await?;
-    
-    // 获取所有行信息
-    let lines = cache.get_lines("data.txt").await?;
-
-    // 零分配随机一行（极快！）
-    if let Some(random) = cache.random_line("corpus.txt").await? {
-        println!("随机行: {}", random);
+    // 零分配随机采样（推荐用于大模型语料）
+    if let Some(line) = cache.random_line("corpus.txt").await? {
+        println!("随机语料: {}", line);
     }
 
-    // 随机一个字符（支持中文、emoji）
-    if let Some(ch) = cache.random_sign("mixed.txt").await? {
-        println!("随机字符: {}", ch);
+    // 随机一个字符（完整支持 Unicode）
+    if let Some(ch) = cache.random_sign("text.txt").await? {
+        println!("随机字符: {ch}");
+    }
+
+    // 按行读取（1-based）
+    if let Some(line42) = cache.get_line("data.txt", 42).await? {
+        println!("第 42 行: {line42}");
+    }
+
+    // 获取所有行
+    if let Some(lines) = cache.get_lines("config.txt").await? {
+        println!("共 {} 行", lines.len());
     }
 
     Ok(())
